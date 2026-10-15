@@ -1,0 +1,67 @@
+# Template policy for YOUR regression model (here: the Colab walkthrough's model).
+#
+# 1. Copy to configs/governance.yaml and rename `colab_regressor` to your model name.
+# 2. Set thresholds in YOUR target's units (California housing: $100,000s).
+#    Measure your champion first; the numbers below are placeholders.
+# 3. Set ML_SENTRY_POLICY_PATH=/app/configs/governance.yaml and restart api + worker.
+# 4. The external runner also needs ML_SENTRY_RETRAINING_ENABLED=true and a
+#    ML_SENTRY_RUNNER_TOKEN (see docs/colab.md).
+schema_version: 1
+
+defaults:
+  minimum_sample_count: 100
+  require_baseline: true
+  require_human_retraining_approval: true
+  require_human_deployment_approval: true
+  require_candidate_evaluation: true
+  retraining_enabled: true
+  deployment_enabled: true
+  approval_ttl_hours: 24
+  require_distinct_approvers: false   # set true when you have two reviewers
+
+pipelines:
+  colab_retrain:
+    # "external": ML Sentry never trains; your notebook/pipeline claims the approved
+    # job over the API and reports the candidate back.
+    runner: external
+    description: Retrain HistGradientBoostingRegressor in the Colab walkthrough notebook.
+    training_dataset: {dataset_id: california-housing-train, dataset_version: v1-seed42}
+    config:           # the ONLY knobs a job can use; reviewers see them before approving
+      max_iter: 300
+      learning_rate: 0.1
+    timeout_minutes: 120
+
+release_targets:
+  local_alias:
+    adapter: mock          # records the new champion in ML Sentry only
+  # mlflow_champion:      # moves an MLflow Model Registry alias instead (real target;
+  #   adapter: mlflow_alias  # also needs ML_SENTRY_DEPLOYMENT_ENABLED=true)
+  #   registered_model: colab_regressor
+  #   alias: champion
+
+models:
+  colab_regressor:
+    task_type: regression
+    primary_metric: rmse
+    metrics:
+      rmse:
+        direction: minimize
+        warning_relative_increase: 0.10
+        critical_relative_increase: 0.20
+        maximum_acceptable: 1.0
+      mae:
+        direction: minimize
+        maximum_acceptable: 0.8
+      r2:
+        direction: maximize
+        warning_relative_decrease: 0.05
+        minimum_acceptable: 0.60
+    retraining:
+      allowed: true
+      pipeline_id: colab_retrain
+      cooldown_hours: 0          # raise in production (e.g. 24)
+      max_attempts_per_incident: 1
+    deployment:
+      allowed: true
+      target: local_alias
+      min_primary_improvement: 0.0

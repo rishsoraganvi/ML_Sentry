@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:  # reused by build-publish-image.yml so images ship only after CI passes
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_USER: mlsentry
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: mlsentry_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U mlsentry -d mlsentry_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      ML_SENTRY_TEST_DATABASE_URL: postgresql+psycopg://mlsentry:ci-only-password@127.0.0.1:5432/mlsentry_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.5"
+      - run: uv sync --frozen --python 3.12
+      - run: uv run ruff format --check src tests examples
+      - run: uv run ruff check src tests examples
+      - run: uv run mypy
+      - name: Notebook is in sync with its sources
+        run: uv run python examples/colab/build_notebook.py && git diff --exit-code examples/colab
+      - run: uv run pytest --cov=ml_sentry --cov-report=term-missing
+      - name: Dependency vulnerability audit
+        run: uvx pip-audit==2.9.0 --strict --requirement <(uv export --frozen --no-dev --no-hashes)
+
+  secrets-scan:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  stack:
+    # Builds the image, starts the real Compose stack (+ MLflow) and runs the
+    # end-to-end tests over HTTP, including the worker and both approval gates.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.5"
+      - run: uv sync --frozen --python 3.12
+      - name: Generate throwaway secrets
+        run: |
+          echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+          echo "ML_SENTRY_API_TOKEN=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          ALICE=$(openssl rand -hex 32); BOB=$(openssl rand -hex 32); RUNNER=$(openssl rand -hex 32)
+          echo "::add-mask::$ALICE"; echo "::add-mask::$BOB"; echo "::add-mask::$RUNNER"
+          echo "ML_SENTRY_E2E_REVIEWER_TOKEN=$ALICE" >> "$GITHUB_ENV"
+          echo "ML_SENTRY_E2E_REVIEWER2_TOKEN=$BOB" >> "$GITHUB_ENV"
+          {
+            echo "ML_SENTRY_REVIEWERS=alice:$(printf %s "$ALICE" | sha256sum | cut -d' ' -f1),bob:$(printf %s "$BOB" | sha256sum | cut -d' ' -f1)"
+            echo "ML_SENTRY_RUNNER_TOKEN=$RUNNER"
+            echo "ML_SENTRY_MLFLOW_TRACKING_URI=http://mlflow:5000"
+            echo "ML_SENTRY_MLFLOW_ALLOWED_EXPERIMENTS=ml-sentry-it"
+            echo "ML_SENTRY_WORKER_POLL_SECONDS=1"
+          } > "$RUNNER_TEMP/stack.env"
+          echo "ML_SENTRY_ENV_FILE=$RUNNER_TEMP/stack.env" >> "$GITHUB_ENV"
+      - run: docker compose --profile mlflow up --build -d --wait
+      - run: docker compose exec -T api ml-sentry doctor
+      - run: docker compose exec -T api ml-sentry demo
+      - run: uv run pytest -m stack tests/e2e
+        env:
+          ML_SENTRY_E2E: "1"
+          ML_SENTRY_E2E_MLFLOW: "1"
+      - name: Image runs as non-root
+        run: test "$(docker compose exec -T api id -u)" != "0"
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color api worker mlflow
+      - if: always()
+        run: docker compose --profile mlflow down -v

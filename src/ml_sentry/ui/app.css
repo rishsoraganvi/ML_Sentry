@@ -1,0 +1,19 @@
+:root { color-scheme: light dark; --bg: #fff; --fg: #1d1d1f; --muted: #6b6b70; --line: #ddd; --ok: #1a7f37; --bad: #b42318; --warn: #9a6700; }
+@media (prefers-color-scheme: dark) { :root { --bg: #151517; --fg: #ececf0; --muted: #a0a0a8; --line: #33333a; } }
+body { margin: 0; font: 15px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+header nav a { margin-right: 10px; }
+header form { margin-left: auto; display: flex; gap: 6px; }
+main { padding: 16px; max-width: 1000px; margin: 0 auto; }
+input, textarea, button { font: inherit; }
+button { cursor: pointer; padding: 4px 12px; }
+table { border-collapse: collapse; width: 100%; }
+td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+pre { background: rgba(127,127,127,.12); padding: 10px; overflow-x: auto; font-size: 13px; }
+.muted { color: var(--muted); }
+.critical, .rejected, .expired, .failed { color: var(--bad); font-weight: 600; }
+.warning, .pending { color: var(--warn); font-weight: 600; }
+.approved, .resolved, .verified { color: var(--ok); font-weight: 600; }
+.actions { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; margin-top: 12px; }
+textarea { width: 100%; min-height: 60px; }
+.error { color: var(--bad); }

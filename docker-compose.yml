@@ -1,0 +1,102 @@
+name: ml-sentry
+
+# Shared settings for the api and worker containers (same image, same configuration).
+x-ml-sentry: &ml-sentry
+  build: .
+  image: ml-sentry:dev
+  env_file:
+    # Optional settings file; ML_SENTRY_ENV_FILE lets you keep it outside the repo.
+    - path: ${ML_SENTRY_ENV_FILE:-.env}
+      required: false
+  environment: &ml-sentry-env
+    ML_SENTRY_API_TOKEN: ${ML_SENTRY_API_TOKEN:?Set ML_SENTRY_API_TOKEN in .env (see .env.example)}
+    ML_SENTRY_DATABASE_URL: postgresql+psycopg://mlsentry:${POSTGRES_PASSWORD}@postgres:5432/mlsentry
+    ML_SENTRY_POLICY_PATH: ${ML_SENTRY_POLICY_PATH:-/app/configs/governance.example.yaml}
+    ML_SENTRY_ARTIFACT_DIR: /var/lib/ml-sentry/artifacts
+    ML_SENTRY_API_URL: http://api:8000
+    # Base URL humans use; appears in notification links.
+    ML_SENTRY_PUBLIC_URL: ${ML_SENTRY_PUBLIC_URL:-http://127.0.0.1:8000}
+  volumes:
+    # Edit policies on the host without rebuilding; mounted read-only.
+    - ./configs:/app/configs:ro
+    - artifacts:/var/lib/ml-sentry/artifacts
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: mlsentry
+      POSTGRES_DB: mlsentry
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (see .env.example)}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Loopback only; used by local tooling and the PostgreSQL test suite.
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlsentry -d mlsentry"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    <<: *ml-sentry
+    environment:
+      <<: *ml-sentry-env
+      ML_SENTRY_API_URL: http://127.0.0.1:8000
+    ports:
+      - "127.0.0.1:${ML_SENTRY_API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Runs mock training jobs, expires approvals, enforces job deadlines and resumes
+  # interrupted workflows. It never executes user code.
+  worker:
+    <<: *ml-sentry
+    command: ["ml-sentry", "worker"]
+    healthcheck:
+      disable: true
+    depends_on:
+      api:
+        condition: service_healthy  # the api container applies migrations first
+
+  # Optional local MLflow (docker compose --profile mlflow up -d). Not needed if you
+  # already have an MLflow server: set ML_SENTRY_MLFLOW_TRACKING_URI to it instead.
+  mlflow:
+    profiles: ["mlflow"]
+    image: ghcr.io/mlflow/mlflow:v3.10.0
+    command:
+      - mlflow
+      - server
+      - --host=0.0.0.0
+      - --port=5000
+      - --backend-store-uri=sqlite:////mlflow/mlflow.db
+      - --artifacts-destination=/mlflow/artifacts
+      - --serve-artifacts
+      - --allowed-hosts=mlflow,mlflow:5000,localhost,localhost:5000,127.0.0.1,127.0.0.1:5000
+    volumes:
+      - mlflowdata:/mlflow
+    ports:
+      - "127.0.0.1:${MLFLOW_HOST_PORT:-5000}:5000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  artifacts:
+  mlflowdata:

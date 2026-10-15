@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ML Sentry</title>
+<link rel="stylesheet" href="/ui/app.css">
+</head>
+<body>
+<header>
+  <strong>ML Sentry</strong>
+  <nav><a href="#approvals">Approvals</a> <a href="#incidents">Incidents</a></nav>
+  <form id="token-form">
+    <input id="token" type="password" placeholder="Reviewer or service token" autocomplete="off" aria-label="API token">
+    <button type="submit">Use token</button>
+    <button type="button" id="forget">Forget</button>
+  </form>
+</header>
+<main id="main"><p>Enter your token to start. It is kept only in this browser tab.</p></main>
+<script src="/ui/app.js"></script>
+</body>
+</html>

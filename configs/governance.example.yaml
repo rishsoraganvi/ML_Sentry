@@ -1,0 +1,94 @@
+# ML Sentry governance policy (schema version 1).
+#
+# The numbers below are PLACEHOLDERS that illustrate the configuration format.
+# They are not validated for any business or domain. Copy this file to
+# configs/governance.yaml, set thresholds that suit your model, and point
+# ML_SENTRY_POLICY_PATH at it.
+#
+# Unknown keys are rejected and a missing or malformed file stops the service
+# (fail closed). Check a file with:  ml-sentry validate-policy <path>
+schema_version: 1
+
+defaults:
+  minimum_sample_count: 100
+  require_baseline: true
+  # Human approval and candidate evaluation cannot be disabled; only `true` is accepted.
+  require_human_retraining_approval: true
+  require_human_deployment_approval: true
+  require_candidate_evaluation: true
+  # Global switches. A model must ALSO allow retraining/deployment itself, and a
+  # non-mock runner or target additionally needs ML_SENTRY_RETRAINING_ENABLED /
+  # ML_SENTRY_DEPLOYMENT_ENABLED=true in the environment.
+  retraining_enabled: true
+  deployment_enabled: true
+  approval_ttl_hours: 24
+  require_distinct_approvers: false
+
+# Allow-listed training pipelines. "mock" simulates training inside ML Sentry;
+# "external" hands the approved job to YOUR pipeline (e.g. a Colab notebook),
+# which claims it over the API and reports the candidate back.
+pipelines:
+  demo_mock_retrain:
+    runner: mock
+    description: Simulated retraining for the demo model; trains nothing.
+    training_dataset: {dataset_id: demo-housing-train, dataset_version: "2026-01-01"}
+    config:
+      simulated_improvement: 0.12   # candidate is 12 % better than the champion
+    timeout_minutes: 10
+
+# Allow-listed release targets. "mock" only updates ML Sentry's own model alias
+# table; "mlflow_alias" moves an MLflow Model Registry alias.
+release_targets:
+  demo_local_alias:
+    adapter: mock
+    description: Updates ML Sentry's internal champion alias only.
+
+models:
+  # Monitoring only: retraining and deployment are off for this model.
+  house_price_regressor:
+    task_type: regression
+    primary_metric: rmse
+    metrics:
+      rmse:
+        direction: minimize
+        warning_relative_increase: 0.10   # >10 % worse than baseline -> warning
+        critical_relative_increase: 0.20  # >20 % worse than baseline -> critical
+        maximum_acceptable: 50000         # absolute hard limit -> critical
+      mae:
+        direction: minimize
+        maximum_acceptable: 35000
+      r2:
+        direction: maximize
+        warning_relative_decrease: 0.05
+        minimum_acceptable: 0.70
+    retraining:
+      allowed: false
+    deployment:
+      allowed: false
+
+  # Full remediation loop with the mock runner and mock target (safe to try).
+  demo_regressor:
+    task_type: regression
+    primary_metric: rmse
+    metrics:
+      rmse:
+        direction: minimize
+        warning_relative_increase: 0.10
+        critical_relative_increase: 0.20
+        maximum_acceptable: 50000
+      mae:
+        direction: minimize
+        maximum_acceptable: 35000
+      r2:
+        direction: maximize
+        warning_relative_decrease: 0.05
+        minimum_acceptable: 0.70
+    retraining:
+      allowed: true
+      pipeline_id: demo_mock_retrain
+      cooldown_hours: 0
+      max_attempts_per_incident: 1
+    deployment:
+      allowed: true
+      target: demo_local_alias
+      min_primary_improvement: 0.0

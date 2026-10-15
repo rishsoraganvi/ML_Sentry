@@ -1,0 +1,10 @@
+# Gitleaks configuration (used by the CI secrets-scan job).
+# Test fixtures contain obviously fake tokens; real secrets belong only in .env.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fake credentials in tests and documentation placeholders"
+paths = [
+  '''^tests/''',
+]

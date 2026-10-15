@@ -1,0 +1,69 @@
+# Image-based installation (no source checkout needed).
+#
+# STATUS: prepared for v0.1.0 but NOT yet verified against a published image. The image
+# below is produced by .github/workflows/build-publish-image.yml when the v0.1.0 tag is
+# pushed (after CI passes). Test this file once the image exists before relying on it.
+#
+#   docker compose -f docker-compose.release.yml pull
+#   docker compose -f docker-compose.release.yml up -d --wait
+#
+# Your own policy: put it in ./configs next to this file and set
+#   ML_SENTRY_POLICY_PATH=/app/configs/custom/governance.yaml
+name: ml-sentry
+
+x-ml-sentry: &ml-sentry
+  image: ghcr.io/rishsoraganvi/ml-sentry:0.1.0   # pinned release tag; never use :latest
+  env_file:
+    - path: ${ML_SENTRY_ENV_FILE:-.env}
+      required: false
+  environment: &ml-sentry-env
+    ML_SENTRY_API_TOKEN: ${ML_SENTRY_API_TOKEN:?Set ML_SENTRY_API_TOKEN in .env (see .env.example)}
+    ML_SENTRY_DATABASE_URL: postgresql+psycopg://mlsentry:${POSTGRES_PASSWORD}@postgres:5432/mlsentry
+    ML_SENTRY_POLICY_PATH: ${ML_SENTRY_POLICY_PATH:-/app/configs/governance.example.yaml}
+    ML_SENTRY_ARTIFACT_DIR: /var/lib/ml-sentry/artifacts
+    ML_SENTRY_API_URL: http://api:8000
+    ML_SENTRY_PUBLIC_URL: ${ML_SENTRY_PUBLIC_URL:-http://127.0.0.1:8000}
+  volumes:
+    # Optional: mount your own policies; the image already contains the examples.
+    - ./configs:/app/configs/custom:ro
+    - artifacts:/var/lib/ml-sentry/artifacts
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: mlsentry
+      POSTGRES_DB: mlsentry
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (see .env.example)}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlsentry -d mlsentry"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    <<: *ml-sentry
+    environment:
+      <<: *ml-sentry-env
+      ML_SENTRY_API_URL: http://127.0.0.1:8000
+    ports: ["127.0.0.1:${ML_SENTRY_API_PORT:-8000}:8000"]
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  worker:
+    <<: *ml-sentry
+    command: ["ml-sentry", "worker"]
+    healthcheck: {disable: true}
+    depends_on:
+      api: {condition: service_healthy}
+
+volumes:
+  pgdata:
+  artifacts:
