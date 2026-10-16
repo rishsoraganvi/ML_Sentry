@@ -60,7 +60,12 @@ services:
   worker:
     <<: *ml-sentry
     command: ["ml-sentry", "worker"]
-    healthcheck: {disable: true}
+    healthcheck:
+      test: ["CMD", "ml-sentry", "worker-health", "--max-age", "60"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     depends_on:
       api: {condition: service_healthy}
 

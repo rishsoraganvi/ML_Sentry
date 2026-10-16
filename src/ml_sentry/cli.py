@@ -238,7 +238,8 @@ def doctor() -> None:
     check(
         "INFO",
         "worker",
-        "runs as the 'worker' Compose service (check: docker compose ps worker)",
+        "runs as the 'worker' Compose service; its healthcheck is `ml-sentry worker-health` "
+        "(check: docker compose ps worker)",
     )
 
     if failures:
@@ -281,6 +282,23 @@ def worker() -> None:
     with open_checkpointer(settings.database_url) as checkpointer:
         runner = WorkflowRunner(build_deps(settings, factory, loaded), checkpointer)
         Worker(runner).run_forever(settings.worker_poll_seconds)
+
+
+@app.command("worker-health")
+def worker_health(
+    max_age: float = typer.Option(60.0, help="Seconds since the last completed cycle"),
+) -> None:
+    """Exit 0 if the worker completed a cycle recently (used as the container healthcheck)."""
+    from ml_sentry.jobs.worker import HEARTBEAT_PATH, heartbeat_age
+
+    age = heartbeat_age()
+    if age is None:
+        typer.echo(f"unhealthy: no heartbeat at {HEARTBEAT_PATH} yet")
+        raise typer.Exit(1)
+    if age > max_age:
+        typer.echo(f"unhealthy: last completed cycle {age:.0f}s ago (> {max_age:.0f}s)")
+        raise typer.Exit(1)
+    typer.echo(f"healthy: last completed cycle {age:.1f}s ago")
 
 
 @app.command("mlflow-import")

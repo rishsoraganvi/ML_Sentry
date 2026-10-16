@@ -7,8 +7,11 @@ user's own pipeline over the API; the worker only enforces their deadlines.
 from __future__ import annotations
 
 import logging
+import os
 import threading
+import time
 import uuid
+from pathlib import Path
 
 from ml_sentry.graph.runtime import WorkflowRunner
 from ml_sentry.jobs.mock_runner import MOCK_ACTOR, simulate
@@ -22,6 +25,27 @@ from ml_sentry.jobs.service import (
 from ml_sentry.services.approvals import expire_overdue
 
 logger = logging.getLogger(__name__)
+
+# Container healthcheck: `ml-sentry worker-health` checks this file's age. /tmp is a
+# writable tmpfs in the read-only containers.
+HEARTBEAT_PATH = Path(
+    os.environ.get("ML_SENTRY_WORKER_HEARTBEAT", "/tmp/ml-sentry-worker.heartbeat")  # noqa: S108
+)
+
+
+def beat(path: Path) -> None:
+    try:
+        path.write_text(str(time.time()), encoding="ascii")
+    except OSError:
+        logger.warning("cannot write worker heartbeat %s", path)
+
+
+def heartbeat_age(path: Path = HEARTBEAT_PATH) -> float | None:
+    """Seconds since the last completed worker cycle, or None if there was none."""
+    try:
+        return time.time() - path.stat().st_mtime
+    except OSError:
+        return None
 
 
 class Worker:
@@ -60,7 +84,12 @@ class Worker:
             "workflows_woken": len(woken),
         }
 
-    def run_forever(self, poll_seconds: float, stop: threading.Event | None = None) -> None:
+    def run_forever(
+        self,
+        poll_seconds: float,
+        stop: threading.Event | None = None,
+        heartbeat: Path | None = HEARTBEAT_PATH,
+    ) -> None:
         stop = stop or threading.Event()
         logger.info("worker %s started (poll every %.1fs)", self.runner.owner, poll_seconds)
         while not stop.is_set():
@@ -68,6 +97,9 @@ class Worker:
                 stats = self.run_once()
                 if any(stats.values()):
                     logger.info("worker cycle: %s", stats)
+                # Only a completed cycle counts as alive (e.g. not while the DB is down).
+                if heartbeat is not None:
+                    beat(heartbeat)
             except Exception:
                 logger.exception("worker cycle failed")
             stop.wait(poll_seconds)

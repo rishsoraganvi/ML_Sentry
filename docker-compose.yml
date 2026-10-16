@@ -64,8 +64,13 @@ services:
   worker:
     <<: *ml-sentry
     command: ["ml-sentry", "worker"]
+    # Healthy while the worker keeps completing cycles (heartbeat file in /tmp).
     healthcheck:
-      disable: true
+      test: ["CMD", "ml-sentry", "worker-health", "--max-age", "60"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     depends_on:
       api:
         condition: service_healthy  # the api container applies migrations first

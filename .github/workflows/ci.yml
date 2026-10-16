@@ -41,14 +41,25 @@ jobs:
         run: uvx pip-audit==2.9.0 --strict --requirement <(uv export --frozen --no-dev --no-hashes)
 
   secrets-scan:
+    # Scans the WHOLE git history with a pinned, checksum-verified gitleaks CLI.
+    # (gitleaks-action scans only the pushed commit range, which breaks on a
+    # repository's first push or after a force push: "<root>^" does not exist.)
     runs-on: ubuntu-24.04
+    env:
+      GITLEAKS_VERSION: "8.24.3"
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install gitleaks
+        run: |
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          curl -fsSLO "$base/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSLO "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          sha256sum --check --ignore-missing "gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          tar -xzf "gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" gitleaks
+      - name: Scan full history
+        run: ./gitleaks git --redact --verbose --exit-code 1 .
 
   stack:
     # Builds the image, starts the real Compose stack (+ MLflow) and runs the
