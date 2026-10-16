@@ -37,7 +37,10 @@ The policy must also allow the action (`defaults.*_enabled` and the model's
 
 ## Notifications
 
-See [notifications.md](notifications.md) for:
+Not sure which platform to use? See
+[Choosing your alert channel](notifications.md#choosing-your-alert-channel). It has a
+decision table and setup steps for console, Slack, Telegram, webhook and none. Then
+see [notifications.md](notifications.md) for:
 - `ML_SENTRY_NOTIFICATION_PROVIDER`
 - `ML_SENTRY_SLACK_WEBHOOK_URL`
 - `ML_SENTRY_TELEGRAM_BOT_TOKEN`, `ML_SENTRY_TELEGRAM_CHAT_ID`

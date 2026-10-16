@@ -6,8 +6,12 @@
 - **Repository:** <https://github.com/rishsoraganvi/ML_Sentry>, with docs, the
   release Compose file and the Colab badge pointing at it.
 - **License:** MIT, confirmed.
-- **Docs:** guide to choosing an alert channel (console, Slack, Telegram or webhook)
-  and how alerts differ from the audit trail.
+- **Docs:** guide to choosing an alert platform (console, Slack, Telegram, webhook or
+  none), with:
+  - a comparison table, and how alerts differ from the audit trail;
+  - relay recipes for Teams, Discord, email, PagerDuty and Jira;
+  - a summary in the README, linked from quickstart, your-model, Colab and
+    configuration.
 
 ### Milestone 7 — release readiness
 - **Docs:** your-model guide, Google Colab guide, approvals, MLflow, training runners,

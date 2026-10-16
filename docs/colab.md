@@ -87,6 +87,28 @@ python examples/send_evaluation_event.py event.json
 The external runner needs option A or B. Without them, run retraining on your own
 machine with the same client.
 
+### Optional: get alerts away from your desk
+
+Colab jobs and approval requests can arrive while you're away from the terminal. In
+that case, send alerts to your phone with Telegram, or to your team with Slack,
+instead of the default log output:
+
+```bash
+# .env on your machine (not in Colab)
+ML_SENTRY_NOTIFICATION_PROVIDER=telegram
+ML_SENTRY_TELEGRAM_BOT_TOKEN=123456:ABC...
+ML_SENTRY_TELEGRAM_CHAT_ID=987654321
+```
+
+Then run `docker compose up -d` to apply it.
+
+Alerts link to your ML Sentry UI, so set `ML_SENTRY_PUBLIC_URL` to an address you
+can open. Opening the link still requires your reviewer token, and replying to an
+alert never approves anything.
+
+All platforms and setup steps:
+[notifications.md → Choosing your alert channel](notifications.md#choosing-your-alert-channel).
+
 ## Step 3: Store the secrets in Colab
 
 In Colab, open the 🔑 **Secrets** panel (left sidebar) and add:

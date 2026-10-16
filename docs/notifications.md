@@ -30,6 +30,49 @@ Pick the channel your team already watches:
 Only **one** provider is active at a time. To reach several destinations, use
 `webhook` and fan out from your automation tool.
 
+### Comparing the platforms
+
+| | `console` | `slack` | `telegram` | `webhook` | `none` |
+|---|---|---|---|---|---|
+| Where messages appear | api/worker logs | One Slack channel | One Telegram chat or group | Any HTTPS endpoint you run or subscribe to | Nowhere |
+| Reaches your phone | No | Yes (Slack app) | Yes (Telegram app) | Depends on the receiver | No |
+| Several people | Whoever reads the logs | Everyone in the channel | Everyone in the group | Anything your relay supports | – |
+| Several platforms at once | No | No | No | **Yes**, by fanning out from the receiver | – |
+| Needs an account or app | No | Slack workspace + app | Telegram bot | Your own endpoint or automation service | No |
+| Where the data goes | Stays on your machine | Slack's servers | Telegram's servers | Wherever you send it | Stays on your machine |
+| Message is signed | – | No (secret URL) | No (secret bot token) | **Yes** (HMAC-SHA256) | – |
+| Settings | none | 1 | 2 | 2 | none |
+
+**How to decide:**
+1. **Already using Slack?** Use `slack`.
+2. **Want phone alerts without Slack?** Use `telegram`.
+3. **Need any other platform, more than one, or a ticket or page?** Use `webhook`.
+4. **Just trying ML Sentry out?** Keep `console`.
+
+Data policy matters too: Slack and Telegram store message contents on their servers.
+ML Sentry messages contain only model names, metrics summaries and links, never data
+rows or secrets. Still, use `webhook` to an internal endpoint if no third party may
+receive them.
+
+### Other platforms through `webhook`
+
+These platforms expect their own message formats, so put a small relay between ML
+Sentry and the platform. The relay receives ML Sentry's signed JSON, verifies it,
+and posts in the platform's format. A no-code automation tool (n8n, Zapier, Make,
+Power Automate) or a few lines of your own code work as relays.
+
+| Destination | Relay does |
+|---|---|
+| **Microsoft Teams** | Post `summary` and `link` to a Teams channel, e.g. a Power Automate "post message in a chat or channel" flow triggered by HTTP |
+| **Discord** | POST `{"content": "<summary>\n<link>"}` to a Discord channel webhook URL |
+| **Email** | Send an email with subject `"[ML Sentry] " + kind + " " + model_name` and body `summary` + `link` |
+| **PagerDuty / Opsgenie** | Create an incident for `kind == "approval_request"`, or for `severity == "critical"` |
+| **Jira / GitHub Issues** | Open a ticket per `incident_id`, deduplicated on that ID |
+| **Several at once** | Do any combination of the above from one relay |
+
+ML Sentry's JSON fields are listed under [Webhook signature](#webhook-signature).
+Always verify the signature before acting on a message.
+
 ### Slack
 
 1. In Slack, go to <https://api.slack.com/apps> → *Create New App* → *From scratch*.

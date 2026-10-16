@@ -66,9 +66,59 @@ Start with **[docs/your-model.md](docs/your-model.md)**. It covers three integra
 | You log evaluations to MLflow | Point ML Sentry at the run ([MLflow](docs/mlflow-integration.md)) |
 | Your model lives in **Google Colab** | [docs/colab.md](docs/colab.md) and the ready-made notebook: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/rishsoraganvi/ML_Sentry/blob/main/examples/colab/ml_sentry_colab_walkthrough.ipynb) |
 
+## Choosing where alerts go (Slack, Telegram, webhook…)
+
+ML Sentry keeps two separate records of what happens:
+
+- **The audit trail** is always stored in ML Sentry's database, whichever alert
+  platform you choose. You view it in the UI (incident → *Audit timeline*) or with
+  `GET /api/v1/incidents/{id}/audit`. It cannot be turned off.
+- **Alerts** are push messages telling people that an approval is needed or that
+  an incident has an outcome. You choose **one** platform for them with
+  `ML_SENTRY_NOTIFICATION_PROVIDER` in `.env`.
+
+| If you… | Set `ML_SENTRY_NOTIFICATION_PROVIDER=` | You also set | Setup |
+|---|---|---|---|
+| are trying ML Sentry out, or work alone at the terminal | `console` (default) | nothing | Messages appear in `docker compose logs -f api worker` |
+| work in a **Slack** workspace | `slack` | `ML_SENTRY_SLACK_WEBHOOK_URL` | ~2 min: create an Incoming Webhook ([steps](docs/notifications.md#slack)) |
+| want alerts **on your phone**, or don't use Slack | `telegram` | `ML_SENTRY_TELEGRAM_BOT_TOKEN`, `ML_SENTRY_TELEGRAM_CHAT_ID` | ~3 min: make a bot with @BotFather ([steps](docs/notifications.md#telegram)) |
+| use **Teams, Discord, email, PagerDuty, Jira, n8n/Zapier**, or want **several** platforms | `webhook` | `ML_SENTRY_WEBHOOK_URL`, `ML_SENTRY_WEBHOOK_SECRET` | Point it at your relay or automation and verify the signature ([steps](docs/notifications.md#webhook-anything-else)) |
+| want **no push messages** (audit trail only) | `none` | nothing | — |
+
+For example, to send alerts to Slack:
+
+```bash
+# .env
+ML_SENTRY_NOTIFICATION_PROVIDER=slack
+ML_SENTRY_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/XXX/YYY/ZZZ
+```
+
+Apply the change and send a test alert:
+
+```bash
+docker compose up -d
+docker compose exec api ml-sentry doctor
+curl -X POST -H "Authorization: Bearer $ML_SENTRY_API_TOKEN" http://127.0.0.1:8000/api/v1/admin/test-notification
+```
+
+`doctor` shows which provider is active, and the test alert confirms that it works.
+
+**Good to know:**
+- **No approval by message.** An alert only links to the approval UI. Nobody can
+  approve anything by replying to it.
+- **Failures don't change decisions.** A failed delivery is recorded with an error
+  code and never changes a decision.
+- **No secrets in alerts.** Messages never contain secrets or data rows.
+- **Links.** Set `ML_SENTRY_PUBLIC_URL` to an address your reviewers can open, so the
+  links in alerts work.
+
+Full guide: **[docs/notifications.md](docs/notifications.md)**. It covers choosing a
+platform, setup steps for each one, the delivery guarantees, and how to verify webhook
+signatures.
+
 ## Documentation
 
-- **Getting started:** [Quickstart](docs/quickstart.md) · [Your model](docs/your-model.md) · [Google Colab](docs/colab.md) · [Configuration](docs/configuration.md)
+- **Getting started:** [Quickstart](docs/quickstart.md) · [Your model](docs/your-model.md) · [Google Colab](docs/colab.md) · [Choosing an alert platform](docs/notifications.md#choosing-your-alert-channel) · [Configuration](docs/configuration.md)
 - **Concepts:** [Regression policies](docs/regression-policies.md) · [Governance workflow](docs/workflow.md) · [Approvals](docs/approvals.md) · [Architecture](docs/architecture.md)
 - **Integrations:** [Generic API](docs/generic-api-integration.md) · [MLflow](docs/mlflow-integration.md) · [Training runners](docs/training-adapters.md) · [Release targets](docs/deployment.md) · [Notifications](docs/notifications.md)
 - **Operations:** [Security](SECURITY.md) · [Troubleshooting](docs/troubleshooting.md) · [Backup & restore](docs/backup-restore.md) · [Upgrade & uninstall](docs/upgrade-uninstall.md)

@@ -70,6 +70,23 @@ Generate the runner token with `openssl rand -hex 32` and put it in `.env`. Exte
 runners also need `ML_SENTRY_RETRAINING_ENABLED=true`. Restart with
 `docker compose up -d` and check with `docker compose exec api ml-sentry doctor`.
 
+### Choose where alerts go
+
+Reviewers need to hear about approval requests and incident outcomes. Pick the
+platform your team already watches and set it in `.env`:
+
+| Platform | `ML_SENTRY_NOTIFICATION_PROVIDER` | Best when |
+|---|---|---|
+| Logs | `console` (default) | Trying things out, or working alone |
+| Slack | `slack` | Your team works in Slack |
+| Telegram | `telegram` | You want phone alerts, e.g. while a Colab job runs |
+| Anything else | `webhook` | Teams, Discord, email, PagerDuty, Jira, n8n/Zapier, or several platforms at once |
+| None | `none` | You only want the audit trail |
+
+The audit trail is recorded in every case. Step-by-step setup and a test command
+are in
+[notifications.md → Choosing your alert channel](notifications.md#choosing-your-alert-channel).
+
 ## 4. Register your champion's baseline (once per holdout version)
 
 ```python

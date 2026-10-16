@@ -79,7 +79,27 @@ docker compose exec api ml-sentry demo --full
 
 Nothing is trained or deployed outside ML Sentry. Re-running the demo is idempotent.
 
-## 6. Next
+## 6. Choose where alerts go
+
+By default, alerts are written to the logs (`console`). To send them to Slack,
+Telegram, or anything else through a webhook, set `ML_SENTRY_NOTIFICATION_PROVIDER`
+and that platform's settings in `.env`. Then run:
+
+```bash
+docker compose up -d
+```
+
+and send a test alert:
+
+```bash
+curl -X POST -H "Authorization: Bearer $ML_SENTRY_API_TOKEN" http://127.0.0.1:8000/api/v1/admin/test-notification
+```
+
+Which platform to pick, with setup steps for each:
+[notifications.md → Choosing your alert channel](notifications.md#choosing-your-alert-channel).
+The audit trail is stored whichever platform you choose.
+
+## 7. Next
 
 - Connect your model: [your-model.md](your-model.md), or [colab.md](colab.md) for Colab.
 - Interactive API docs: <http://127.0.0.1:8000/docs>.
